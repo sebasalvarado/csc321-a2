@@ -130,13 +130,13 @@ class MLBL(object):
         Feed-forward pass through the model
 
         Args:
-            params: list of weight matrix
+            params: list of weight matrices.
             X: word indices, shape is [batch_size, context_size] Stores index of word for i,j sentence
             Im: images,  shape is [batch_size, feature_size]
             test: flag, whether test or train
         """
         batch_size = X.shape[0] # shape is [batch size, context size]
-        context_size = X.shape[1] 
+        context_size = X.shape[1]
         R = params[0]   # word representations, variable 'R' in the paper
         C = params[1]   # context parameter of text modality, variable 'C^i' in the paper
         bw = params[2]  # bias of text modality, variable 'b' in the paper
@@ -147,32 +147,33 @@ class MLBL(object):
         # You should implement forward pass here!        
         # preds: softmax output 
         ########################################################################
-        batch_size = X.shape[0]
-        final_probabilities = []
-        for i in range(batch_size):
-            x_i = Im[i,0:]
-            activation = np.maximum(np.zeros((1,self.h)), np.dot(J.T, x_i) + bj)
-            image_weight= np.dot(M.T,activation.T)
-            word_index = X[i,0:]
-            r_i = R[:, word_index]
-            sum_words = np.sum(np.dot(r_i.T, C).T) # This should be D X 1 ie K x 1
-            r_bar = image_weight + sum_words
-            # Compute Probabilites
-            repeated_r_bar = np.tile(r_bar.T, (self.V, 1))
-            exponents = np.sum(repeated_r_bar * R.T) + bw
-            sample_size = np.sum(np.exp(exponents))
-            numerator = np.exp(np.dot(r_bar.T, R) + bw)
-            distribution_i = numerator / sample_size
-            final_probabilities.append(distribution_i)
+        sigma = np.zeros((self.K, batch_size))
+        for i in range(0, context_size):
+            # Compute Sigma
+            word_indices = X[:, i]
+            word_rep = np.dot(np.transpose(C[i,:,:]),R[:,word_indices])
+            sigma += word_rep
+            
+        #Compute Image Representation Weight
+        
+        activation = np.maximum(np.zeros((1, self.h)), np.dot(Im, J) + bj)
+        image_weight = np.dot(activation, M)
+        r_bar = image_weight.T + sigma # Matrix of word predictions ( K x batch_size)
+        # Compute Probabilites
+        numerator_input = np.dot(r_bar.T, R) + bw
+        prob = np.exp(numerator_input)
+        sample_size_sum = np.sum(prob, 1)
+        final_sample = np.tile(sample_size_sum, (prob.shape[1], 1))
 
-
-        # Concatenate the Predictions Probabilites.
-        preds = np.concatenate(tuple(final_probabilities), axis=0)
+        preds = prob / final_sample.T
+        # Predictions should be V x batch_size
         return preds
 
     def objective(self, Y, preds):
         """
         Compute the objective function
+        Y - Targets
+        preds - Predictions computed by our forward pass
         """
         batchsize = Y.shape[0]
 
@@ -193,6 +194,11 @@ class MLBL(object):
     def backward(self, params, X, Im, Y):
         """
         Backward pass through the network
+        Args:
+            params: list of weight matrix and all learnable parameters.
+            X: Matrix of Word indices. Stores the index of the word for the context. [batch_size, context_size]
+            Im: images, shape is [batch_size, feature_size]
+            Y: Targets, computes the predicted word vector and batch_size [batch_size, word_vetor]
         """
         ########################################################################
         # You should implement backward pass here!
@@ -204,8 +210,9 @@ class MLBL(object):
         # grad_params[4]: gradient of J
         # grad_params[5]: gradient of bj
         ########################################################################
-
-        # grad_params = ...      
+        gradient_function = grad(self.compute_obj)
+        grad_params = []
+        grad_params = gradient_function(params, X, Im, Y)
 
         ########################################################################
         
